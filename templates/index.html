@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attendance System : Face Recognition based Attendance System</title>
+    <link rel="stylesheet" href="/static/modern-home.css" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="logo">ATTENDANCE SYSTEM</div>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/use">how to use</a></li>
+      </ul>
+      <div style="display: flex; align-items: center;">
+        <a href="/login" class="button admin-btn">Admin Login</a>
+        <a href="/student/login" class="button student-btn">Student Login</a>
+        <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+          🌙
+        </button>
+      </div>
+    </nav>
+    
+    <div class="hero">
+      <div class="hero-left">
+        <img src="/static/images/pic.png" class="hero-img" alt="Attendance System" />
+      </div>
+      <div class="hero-right">
+        <h1>
+          <span class="highlight">Face-Based Attendance</span><br />
+          Your Presence Matters, Make It Count.
+        </h1>
+        <div class="button-group">
+          <a href="/startuser" class="button cta-btn">Start Attendance</a>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      // Dark mode toggle functionality
+      function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        
+        // Save preference to localStorage
+        localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+        
+        // Update toggle button icon
+        const toggleBtn = document.querySelector('.dark-mode-toggle');
+        toggleBtn.textContent = isDarkMode ? '☀️' : '🌙';
+      }
+      
+      // Check for saved dark mode preference on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        const darkMode = localStorage.getItem('darkMode');
+        const toggleBtn = document.querySelector('.dark-mode-toggle');
+        
+        if (darkMode === 'enabled') {
+          document.body.classList.add('dark-mode');
+          toggleBtn.textContent = '☀️';
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Settings</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .section {
+            background: white;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-box h3 {
+            margin: 0;
+            font-size: 2em;
+        }
+        .stat-box p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .form-group input {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 12px 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background-color: #667eea;
+            color: white;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #333;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .alert {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .alert-danger {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-ok {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-missing {
+            background-color: #dc3545;
+            color: white;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ System Settings & Management</h1>
+        <p>Manage system settings, change password, and retrain models</p>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- System Statistics -->
+        {% if stats %}
+        <div class="section">
+            <h2>📊 System Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <h3>{{ stats.total_users }}</h3>
+                    <p>Total Users</p>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                    <h3>{{ stats.total_attendance_days }}</h3>
+                    <p>Attendance Days</p>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">
+                    <h3>{{ stats.faces_folder_size }}</h3>
+                    <p>Face Images</p>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <h3>{{ stats.attendance_folder_size }}</h3>
+                    <p>Attendance Files</p>
+                </div>
+            </div>
+
+            <h3>Model Status</h3>
+            <p>
+                <strong>HOG Model:</strong> 
+                <span class="status-badge {% if stats.model_exists %}status-ok{% else %}status-missing{% endif %}">
+                    {% if stats.model_exists %}✓ Exists{% else %}✗ Missing{% endif %}
+                </span>
+            </p>
+            <p>
+                <strong>LBP Model:</strong> 
+                <span class="status-badge {% if stats.lbp_model_exists %}status-ok{% else %}status-missing{% endif %}">
+                    {% if stats.lbp_model_exists %}✓ Exists{% else %}✗ Missing{% endif %}
+                </span>
+            </p>
+        </div>
+        {% endif %}
+
+        <div class="grid-2">
+            <!-- Change Password Section -->
+            <div class="section">
+                <h2>🔒 Change Admin Password</h2>
+                <form action="{{ url_for('change_password') }}" method="POST">
+                    <div class="form-group">
+                        <label for="old_password">Current Password:</label>
+                        <input type="password" name="old_password" id="old_password" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="new_password">New Password:</label>
+                        <input type="password" name="new_password" id="new_password" minlength="6" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirm_password">Confirm New Password:</label>
+                        <input type="password" name="confirm_password" id="confirm_password" minlength="6" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Change Password</button>
+                </form>
+            </div>
+
+            <!-- Model Management Section -->
+            <div class="section">
+                <h2>🤖 Model Management</h2>
+                <p>Retrain the face recognition models with current user data.</p>
+                <p><strong>Note:</strong> This process may take a few minutes depending on the number of users.</p>
+                
+                <form action="{{ url_for('retrain_model_route') }}" method="POST" onsubmit="return confirm('Are you sure you want to retrain the models? This may take a few minutes.');">
+                    <button type="submit" class="btn btn-warning">🔄 Retrain Models</button>
+                </form>
+
+                <hr style="margin: 20px 0;">
+                
+                <h3>Quick Actions</h3>
+                <a href="{{ url_for('diagnostics') }}" class="btn btn-success">🔍 Run Diagnostics</a>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    Diagnostics will test the model on existing face images to check accuracy.
+                </p>
+            </div>
+        </div>
+
+        <!-- Database Information -->
+        <div class="section">
+            <h2>💾 Database Information</h2>
+            <p><strong>Database:</strong> digitalhajir</p>
+            <p><strong>Host:</strong> localhost</p>
+            <p><strong>Tables:</strong> users, admin</p>
+            <p><strong>Attendance Storage:</strong> CSV files in /Attendance folder</p>
+        </div>
+
+        <br>
+        <a href="{{ url_for('home') }}" class="btn btn-primary">← Back to Home</a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Hajir: Capture Face Images</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='js/styles.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(90deg, rgba(2, 0, 36, 1) 0%, rgba(82, 82, 203, 1) 35%, rgba(0, 212, 255, 1) 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .header-nav {
+            background-color: #0b4c61;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header-nav h1 {
+            color: white;
+            margin: 0;
+            font-size: 28px;
+        }
+        
+        .nav-links a {
+            color: white;
+            margin-left: 15px;
+            text-decoration: none;
+            font-weight: bold;
+            padding: 8px 15px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .main-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            padding: 0 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .content-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            width: 100%;
+        }
+        
+        .info-container {
+            flex: 1;
+            min-width: 300px;
+            max-width: 500px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .canvas-container {
+            flex: 2;
+            min-width: 300px;
+            max-width: 800px;
+            position: relative;
+        }
+        
+        #camCanvas {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background-color: #4CAF50;
+            border-color: #4CAF50;
+        }
+        
+        .btn-primary:hover {
+            background-color: #45a049;
+            border-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.5);
+        }
+        
+        .btn-success {
+            background-color: #2196F3;
+            border-color: #2196F3;
+        }
+        
+        .btn-success:hover {
+            background-color: #0b7dda;
+            border-color: #0b7dda;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(33, 150, 243, 0.5);
+        }
+        
+        .btn-secondary {
+            background-color: #ff9800;
+            border-color: #ff9800;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e68a00;
+            border-color: #e68a00;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(255, 152, 0, 0.5);
+        }
+
+        .btn-danger {
+            background-color: #f44336;
+            border-color: #f44336;
+        }
+        
+        .btn-danger:hover {
+            background-color: #d32f2f;
+            border-color: #d32f2f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(244, 67, 54, 0.5);
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            color: white;
+            text-align: center;
+        }
+
+        .progress {
+            height: 20px;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .progress-bar {
+            background-color: #4CAF50;
+        }
+
+        #status-text {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .alert {
+            margin-top: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+        
+        .user-info {
+            color: white;
+            margin-bottom: 20px;
+        }
+        
+        .user-info h3 {
+            margin-bottom: 15px;
+        }
+        
+        .user-info p {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 300px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-nav">
+        <h1>DIGITAL HAJIR: Capture Face Images</h1>
+        <div class="nav-links">
+            <a href="/home"><i class="material-icons" style="vertical-align: middle; font-size: 18px;">home</i> Home</a>
+            <a href="/userdetails"><i class="material-icons" style="vertical-align: middle; font-size: 18px;">list</i> User List</a>
+        </div>
+    </div>
+
+    <div class="container mb-4">
+        <div class="row justify-content-center">
+            <div class="col-12 text-center">
+                <h2 class="text-white">Capture Face Images</h2>
+                <p class="text-white">Capture 20 face images for the new user</p>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="content-container">
+            <div class="info-container">
+                <div class="user-info">
+                    <h3>User Information</h3>
+                    <p><strong>Name:</strong> {{ username }}</p>
+                    <p><strong>Roll Number:</strong> {{ rollno }}</p>
+                </div>
+                
+                <div class="progress-container" id="progress-container">
+                    <h5>Face Capture Progress</h5>
+                    <div class="progress">
+                        <div class="progress-bar" id="capture-progress" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    </div>
+                    <div id="status-text">Ready to capture</div>
+                </div>
+                
+                <div class="slider-container">
+                    <label for="thresholdSlider" class="text-white">Detection Threshold:</label>
+                    <input type="range" id="thresholdSlider" min="0" max="600" value="300" style="width: 100%;">
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <canvas width="640" height="480"></canvas>
+                <div class="controls">
+                    <button id="toggleWebcam" class="btn btn-primary" onclick="button_callback()">
+                        <i class="material-icons">videocam</i> TOGGLE WEBCAM
+                    </button>
+                    
+                    <button id="startCapture" class="btn btn-success" disabled>
+                        <i class="material-icons">photo_camera</i> CAPTURE FACES
+                    </button>
+                    
+                    <button id="doneButton" class="btn btn-danger hidden">
+                        <i class="material-icons">check_circle</i> DONE
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='picojs-master/manual_detect.js') }}"></script>
+    <script>
+        var initialized = false;
+        var stream = null;
+        var video = null;
+        var captureInterval = null;
+        var captureCount = 0;
+        const REQUIRED_CAPTURES = 20;
+        var lastCaptureTime = 0;
+        const CAPTURE_COOLDOWN = 1000; // 1 second between captures
+        var countdownTimer = null;
+        var facefinder_classify_region = function(r, c, s, pixels, ldim) {return -1.0;};
+        var capturing = false;
+        const username = "{{ username }}";
+        const rollno = "{{ rollno }}";
+
+        // Add event listener for start capture button
+        document.getElementById('startCapture').addEventListener('click', function() {
+            if (!initialized) {
+                alert('Please start the webcam first!');
+                return;
+            }
+            capturing = !capturing;
+            if (capturing) {
+                this.innerHTML = '<i class="material-icons">stop</i> STOP CAPTURING';
+                this.classList.remove("btn-success");
+                this.classList.add("btn-danger");
+                document.getElementById("status-text").textContent = "Get ready! First capture in 3 seconds...";
+                setTimeout(() => {
+                    if (capturing) {
+                        lastCaptureTime = 0; // Reset to trigger first capture immediately
+                    }
+                }, 3000);
+            } else {
+                this.innerHTML = '<i class="material-icons">photo_camera</i> CAPTURE FACES';
+                this.classList.remove("btn-danger");
+                this.classList.add("btn-success");
+                document.getElementById("status-text").textContent = `Captured ${captureCount}/${REQUIRED_CAPTURES} images`;
+            }
+        });
+
+        document.getElementById('doneButton').addEventListener('click', function() {
+            window.location.href = '/home';
+        });
+
+        function button_callback() {
+            if (initialized) {
+                // Stop the webcam
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    stream = null;
+                }
+                var ctx = document.getElementsByTagName('canvas')[0].getContext('2d');
+                ctx.clearRect(0, 0, 640, 480);
+                initialized = false;
+                document.getElementById('startCapture').disabled = true;
+                return;
+            }
+
+            var update_memory = manualDetect.instantiateMemory(5);
+            var cascadeurl = '{{ url_for("static", filename="picojs-master/examples/facefinder") }}';
+            fetch(cascadeurl).then(function(response) {
+                response.arrayBuffer().then(function(buffer) {
+                    var bytes = new Int8Array(buffer);
+                    facefinder_classify_region = manualDetect.unpackCascade(bytes);
+                    console.log('* facefinder loaded');
+                })
+            })
+
+            var ctx = document.getElementsByTagName('canvas')[0].getContext('2d');
+            function rgba_to_grayscale(rgba, nrows, ncols) { return manualDetect.rgbaToGrayscale(rgba, nrows, ncols); }
+            video = document.createElement('video');
+            video.setAttribute('autoplay', '1');
+            video.setAttribute('playsinline', '1');
+            navigator.mediaDevices.getUserMedia({video: true, audio: false}).then(function(mediaStream) {
+                stream = mediaStream;
+                video.srcObject = stream;
+                document.getElementById('startCapture').disabled = false;
+                var last = Date.now();
+                function loop() {
+                    if (!initialized) return;
+
+                    var now = Date.now();
+                    var dt = now - last;
+                    last = now;
+                    
+                    ctx.drawImage(video, 0, 0);
+                    var rgba = ctx.getImageData(0, 0, 640, 480).data;
+                    var image = { "pixels": rgba_to_grayscale(rgba, 480, 640), "nrows": 480, "ncols": 640, "ldim": 640 };
+                    var params = { "shiftfactor": 0.1, "minsize": 100, "maxsize": 1000, "scalefactor": 1.1 };
+                    var dets = manualDetect.runCascade(image, facefinder_classify_region, params);
+                    dets = update_memory(dets);
+                    dets = manualDetect.clusterDetections(dets, 0.2);
+                    
+                    for(i=0; i<dets.length; ++i) {
+                        if(dets[i][3]>50.0) {
+                            var r = dets[i][0], c = dets[i][1], s = dets[i][2];
+                            var x = c - s/2, y = r - s/2;
+                            ctx.lineWidth = 3;
+                            ctx.strokeStyle = 'red';
+                            ctx.strokeRect(x, y, s, s);
+                            
+                            // Capture face if we're in capture mode and enough time has passed
+                            if (capturing && captureCount < REQUIRED_CAPTURES) {
+                                var currentTime = Date.now();
+                                if (currentTime - lastCaptureTime > CAPTURE_COOLDOWN) {
+                                    captureFace(ctx, x, y, s);
+                                }
+                            }
+                        }
+                    }
+                    requestAnimationFrame(loop);
+                }
+                requestAnimationFrame(loop);
+            }).catch(function(err) { 
+                console.error(err);
+                alert('Failed to access webcam. Please ensure you have granted camera permissions.');
+            });
+            initialized = true;
+        }
+
+        function captureFace(ctx, x, y, s) {
+            if (captureCount >= REQUIRED_CAPTURES) {
+                finishCapture();
+                return;
+            }
+
+            // Create a temporary canvas for the face
+            var tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 50;
+            tempCanvas.height = 50;
+            var tempCtx = tempCanvas.getContext('2d');
+            
+            // Draw the detected face region into our temporary canvas, resizing it to 50x50
+            tempCtx.drawImage(ctx.canvas, x, y, s, s, 0, 0, 50, 50);
+            
+            // Convert to base64
+            var imageData = tempCanvas.toDataURL('image/jpeg');
+            
+            // Send to server
+            fetch('/capture_face', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    image: imageData,
+                    username: username,
+                    rollno: rollno
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    lastCaptureTime = Date.now();
+                    captureCount = data.count;
+                    updateProgress(captureCount);
+                    
+                    if (captureCount >= REQUIRED_CAPTURES) {
+                        finishCapture();
+                    }
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function updateProgress(count) {
+            const percentage = Math.min((count / REQUIRED_CAPTURES) * 100, 100);
+            const progressBar = document.getElementById("capture-progress");
+            const statusText = document.getElementById("status-text");
+            
+            progressBar.style.width = `${percentage}%`;
+            progressBar.textContent = `${percentage.toFixed(0)}%`;
+            progressBar.setAttribute("aria-valuenow", percentage);
+            
+            if (capturing && count < REQUIRED_CAPTURES) {
+                const timeLeft = Math.max(0, Math.ceil((CAPTURE_COOLDOWN - (Date.now() - lastCaptureTime)) / 1000));
+                statusText.textContent = `Captured ${count}/${REQUIRED_CAPTURES} images - Next capture in ${timeLeft}s`;
+            } else {
+                statusText.textContent = `Captured ${count}/${REQUIRED_CAPTURES} images`;
+            }
+        }
+
+        function finishCapture() {
+            capturing = false;
+            const startCaptureBtn = document.getElementById('startCapture');
+            startCaptureBtn.innerHTML = '<i class="material-icons">check</i> CAPTURING COMPLETE';
+            startCaptureBtn.disabled = true;
+            document.getElementById('doneButton').classList.remove("hidden");
+            
+            const statusText = document.getElementById("status-text");
+            statusText.textContent = `All ${REQUIRED_CAPTURES} images captured successfully!`;
+        }
+    </script>
+</body>
+</html>

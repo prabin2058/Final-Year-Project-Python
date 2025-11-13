@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+      crossorigin="anonymous"
+    />
+    <!-- Modern Admin Dashboard CSS -->
+    <link rel="stylesheet" href="/static/admin-dashboard.css" />
+    <title>Attendance System: Face Recognition Based Attendance System</title>
+  </head>
+
+  <body>
+    <!-- Modern Navbar -->
+    <nav class="navbar">
+      <div class="container-fluid d-flex justify-content-between align-items-center">
+        <span class="navbar-brand">ATTENDANCE SYSTEM</span>
+        <div class="d-flex gap-3 align-items-center">
+          <button class="btn-icon" onclick="toggleDarkMode()" title="Toggle Dark Mode" style="cursor: pointer;">
+            <span id="theme-icon">🌙</span>
+          </button>
+          <a href="/settings" class="btn btn-outline">⚙️ Settings</a>
+          <a href="/logout" class="btn btn-logout"><span>Logout</span></a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Dashboard Header -->
+    <div class="container">
+      <div class="dashboard-header">
+        <h1 class="main-title">Admin Dashboard</h1>
+        <p class="current-date">{{ datetoday2 }}</p>
+      </div>
+
+      {% if mess%}
+      <div class="alert alert-danger text-center" role="alert">{{ mess }}</div>
+      {% endif %}
+
+      <!-- Dashboard Grid -->
+      <div class="row dashboard-grid">
+        <!-- Today's Attendance Card -->
+        <div class="col-lg-6">
+          <div class="dashboard-card">
+            <div class="card-header">
+              <div class="header-content">
+                <i class="material-icons header-icon">event_available</i>
+                <h3 class="header-title">Today's Attendance</h3>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="print-content">
+                <a href="/startadmin" class="btn btn-primary w-100 mb-3" style="font-size: 1.1rem; padding: 1rem;">
+                  <i class="material-icons">camera_alt</i> Take Attendance
+                </a>
+                
+                <div class="attendance-table">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>S No</th>
+                        <th>Name</th>
+                        <th>Roll No</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% if l %}
+                        {% for i in range(l) %}
+                        <tr>
+                          <td>{{ i+1 }}</td>
+                          <td>{{ names[i] }}</td>
+                          <td>{{ rolls[i] }}</td>
+                          <td>{{ times[i] }}</td>
+                        </tr>
+                        {% endfor %}
+                      {% else %}
+                        <tr>
+                          <td colspan="4" class="empty-state">
+                            <div class="empty-state-container">
+                              <i class="material-icons empty-icon">inbox</i>
+                              <p>No attendance records for today</p>
+                            </div>
+                          </td>
+                        </tr>
+                      {% endif %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <div class="card-actions">
+                <a href="javascript:printContent()" class="btn btn-secondary">
+                  <i class="material-icons">print</i> Print Attendance
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add New User Card -->
+        <div class="col-lg-6">
+          <div class="dashboard-card">
+            <div class="card-header">
+              <div class="header-content">
+                <i class="material-icons header-icon">person_add</i>
+                <h3 class="header-title">Add New User</h3>
+              </div>
+            </div>
+            <div class="card-body">
+              <form method="POST" action="/add" class="add-user-form">
+                <div class="form-group">
+                  <label class="form-label">Full Name<span class="required">*</span></label>
+                  <div class="input-group">
+                    <span class="input-icon"><i class="material-icons">person</i></span>
+                    <input
+                      type="text"
+                      id="newusername"
+                      name="newusername"
+                      class="form-control"
+                      placeholder="Enter full name"
+                      required
+                      pattern="^[a-zA-Z ]{3,}$"
+                      oninvalid="this.setCustomValidity('Enter a valid name')"
+                    />
+                  </div>
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Roll Number<span class="required">*</span></label>
+                  <div class="input-group">
+                    <span class="input-icon"><i class="material-icons">badge</i></span>
+                    <input
+                      type="number"
+                      id="newuserrollno"
+                      name="newuserrollno"
+                      class="form-control"
+                      placeholder="Enter roll number"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label">Email Address<span class="required">*</span></label>
+                  <div class="input-group">
+                    <span class="input-icon"><i class="material-icons">email</i></span>
+                    <input
+                      type="email"
+                      id="newuseremail"
+                      name="newuseremail"
+                      class="form-control"
+                      placeholder="Enter email address (e.g., student@example.com)"
+                      pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+                      title="Please enter a valid email address"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-submit"
+                  onclick="alert('Please be ready to capture image')"
+                >
+                  <i class="material-icons">add_circle</i> Add New User
+                </button>
+              </form>
+              
+              <div class="stats-container">
+                <div class="stats-number">{{ totalreg }}</div>
+                <div class="stats-label">Total Users in Database</div>
+              </div>
+              
+              <div class="action-buttons">
+                <a href="/userdetails" class="btn btn-outline">
+                  <i class="material-icons">people</i> User Details
+                </a>
+                <a href="/reports" class="btn btn-action">
+                  <i class="material-icons">assessment</i> Reports
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      function printContent() {
+        var content = document.getElementById("print-content").innerHTML;
+        var newWindow = window.open();
+        newWindow.document.open();
+        newWindow.document.write('<html><head><title>Today\'s Attendance</title><style>table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#4f46e5;color:white;}</style></head><body><h2 style="text-align:center;">Today\'s Attendance - {{ datetoday2 }}</h2>' + content + '</body></html>');
+        newWindow.document.close();
+        newWindow.print();
+        newWindow.close();
+      }
+      
+      // Dark mode toggle functionality
+      function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        
+        // Save preference to localStorage
+        localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+        
+        // Update toggle button icon
+        const themeIcon = document.getElementById('theme-icon');
+        themeIcon.textContent = isDarkMode ? '☀️' : '🌙';
+      }
+      
+      // Check for saved dark mode preference on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        const darkMode = localStorage.getItem('darkMode');
+        const themeIcon = document.getElementById('theme-icon');
+        
+        if (darkMode === 'enabled') {
+          document.body.classList.add('dark-mode');
+          themeIcon.textContent = '☀️';
+        }
+      });
+    </script>
+  </body>
+</html>

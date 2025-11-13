@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LBPH Model Training Status</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(90deg, rgba(2, 0, 36, 1) 0%, rgba(82, 82, 203, 1) 35%, rgba(0, 212, 255, 1) 100%);
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .header-nav {
+            background-color: #0b4c61;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        .status-badge {
+            font-size: 1.1em;
+            padding: 8px 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-nav">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="text-white mb-0">LBPH Training Status</h1>
+            <div>
+                <a href="/home" class="btn btn-outline-light me-2">Home</a>
+                <a href="/userdetails" class="btn btn-outline-light">Users</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h3 class="mb-0">LBPH Face Recognition Model Status</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-sm-4"><strong>Training Status:</strong></div>
+                            <div class="col-sm-8">
+                                <span class="badge status-badge {{ 'bg-success' if training_info.is_trained else 'bg-danger' }}">
+                                    {{ 'Trained' if training_info.is_trained else 'Not Trained' }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-sm-4"><strong>Recognizer:</strong></div>
+                            <div class="col-sm-8">
+                                <span class="badge status-badge {{ 'bg-success' if training_info.recognizer_initialized else 'bg-danger' }}">
+                                    {{ 'Initialized' if training_info.recognizer_initialized else 'Not Initialized' }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-sm-4"><strong>Face Cascade:</strong></div>
+                            <div class="col-sm-8">
+                                <span class="badge status-badge {{ 'bg-success' if training_info.cascade_initialized else 'bg-danger' }}">
+                                    {{ 'Loaded' if training_info.cascade_initialized else 'Not Loaded' }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-sm-4"><strong>Number of Labels:</strong></div>
+                            <div class="col-sm-8">
+                                <span class="badge bg-info status-badge">{{ training_info.num_labels }}</span>
+                            </div>
+                        </div>
+                        
+                        {% if training_info.labels %}
+                        <div class="row mb-4">
+                            <div class="col-sm-4"><strong>Trained Labels:</strong></div>
+                            <div class="col-sm-8">
+                                {% for label in training_info.labels %}
+                                    <span class="badge bg-secondary me-1 mb-1">{{ label }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="text-center">
+                            <form method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-sync-alt"></i> Retrain Model
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <h5>Troubleshooting Tips:</h5>
+                            <ul class="list-unstyled">
+                                <li><strong>If not trained:</strong> Ensure face images exist in <code>static/faces/username_rollno/</code> folders</li>
+                                <li><strong>If confidence is 100:</strong> The model may need more training images (at least 5-10 per person)</li>
+                                <li><strong>If recognition fails:</strong> Check that OpenCV contrib is installed: <code>pip install opencv-contrib-python</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
