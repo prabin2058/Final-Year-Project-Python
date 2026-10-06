@@ -1,12 +1,13 @@
+import os
 import mysql.connector
 import bcrypt
 
 # MySQL database configuration (same as in app.py)
 db_config = {
-    "host": "localhost",
-    "user": "root",
-    "password": "",
-    "database": "digitalhajir"
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "user": os.environ.get("DB_USER", "root"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+    "database": os.environ.get("DB_NAME", "digitalhajir")
 }
 
 def setup_student_login():

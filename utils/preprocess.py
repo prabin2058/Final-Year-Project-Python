@@ -3,11 +3,14 @@ Face detection and preprocessing helper functions
 Based on user's original working code
 """
 
+import os
 import cv2 as cv
 import numpy as np
 
 # Load HAAR face classifier
-face_cascade_path = "haarcascade_frontalface_default.xml"
+face_cascade_path = cv.data.haarcascades + "haarcascade_frontalface_default.xml"
+if not os.path.exists(face_cascade_path):
+    face_cascade_path = os.path.join(os.path.dirname(__file__), "..", "static", "haarcascade_frontalface_default.xml")
 face_cascade = cv.CascadeClassifier(face_cascade_path)
 
 
@@ -22,9 +25,12 @@ def face_detector(gray_img):
         roi: Region of interest (Face) resized to 200x200
         coord: Coordinates (x, y, w, h)
     """
+    if gray_img is None or not hasattr(gray_img, 'size') or gray_img.size == 0:
+        return None, (None, None, None, None)
+
     faces = face_cascade.detectMultiScale(gray_img, 1.3, 5)
 
-    if faces is () or len(faces) == 0:
+    if faces is None or len(faces) == 0:
         return None, (None, None, None, None)
     
     for (x, y, w, h) in faces:

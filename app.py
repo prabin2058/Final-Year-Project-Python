@@ -1,7 +1,9 @@
 import cv2
 import os
 import shutil
-from flask import Flask, request, render_template, redirect, url_for, flash, session
+import base64
+import io
+from flask import Flask, request, render_template, redirect, url_for, flash, session, jsonify, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 from datetime import date, datetime
 import numpy as np
@@ -9,8 +11,13 @@ import pandas as pd
 import mysql.connector
 import bcrypt
 import re  # For email validation
-# Emotion recognition (FER - CNN based)
-from fer import FER
+# Emotion recognition (FER - CNN based) - optional, requires TensorFlow
+try:
+    from fer import FER
+    _FER_AVAILABLE = True
+except Exception:
+    _FER_AVAILABLE = False
+    print("⚠️ FER (emotion recognition) not available - emotion detection disabled.")
 
 # Import Basic LBPH model (Simple and Working)
 from utils.recognizer_basic_lbph import BasicLBPHRecognizer as LBPModel
@@ -38,10 +45,10 @@ def load_user(id):
 
 # MySQL database configuration
 db_config = {
-    "host": "localhost",
-    "user": "root",
-    "password": "",
-    "database": "digitalhajir"
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "user": os.environ.get("DB_USER", "root"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+    "database": os.environ.get("DB_NAME", "digitalhajir")
 }
 
 # Ensure attendance table has 'expression' column (auto-migration)
@@ -116,11 +123,29 @@ if f"Attendance-{datetoday}.csv" not in os.listdir("Attendance"):
         f.write("Name,Roll,Time")
 
 # Initialize Haar cascade face detector
-face_detector = cv2.CascadeClassifier("static/haarcascade_frontalface_default.xml")
+cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+if not os.path.exists(cascade_path):
+    cascade_path = "static/haarcascade_frontalface_default.xml"
+face_detector = cv2.CascadeClassifier(cascade_path)
 BLUR_THRESHOLD = 80.0
 
-# Initialize FER emotion detector (once)
-emotion_detector = FER(mtcnn=False)
+def safe_imshow(window_name: str, frame) -> int:
+    """Safely show frame in OpenCV window without crashing on macOS non-main threads."""
+    try:
+        cv2.imshow(window_name, frame)
+        return cv2.waitKey(1)
+    except Exception:
+        return -1
+
+def safe_destroy_windows():
+    """Safely close OpenCV GUI windows."""
+    try:
+        cv2.destroyAllWindows()
+    except Exception:
+        pass
+
+# Initialize FER emotion detector (once, only if TensorFlow is available)
+emotion_detector = FER(mtcnn=False) if _FER_AVAILABLE else None
 
 def _map_emotion_to_basic(label: str) -> str:
     try:
@@ -170,6 +195,8 @@ else:
 # Extract the face from an image
 def extract_faces(img):
     """Extract faces with tuned parameters suitable for varied lighting."""
+    if img is None or not hasattr(img, 'size') or img.size == 0:
+        return []
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.equalizeHist(gray)  # Boost contrast for low-light scenarios
 
@@ -1023,305 +1050,106 @@ def notrain():
     return render_template("notrain.html")
 
 
-##route function when user take attendance
-@app.route("/startuser", methods=["GET", "POST"])
-def startuser():
-    # Ensure LBP model is ready (will auto-train if missing)
+## Route for in-browser live attendance / face detection
+@app.route("/detect")
+def detect():
     try:
         ensure_expression_column()
         ensure_lbp_model()
     except Exception as e:
-        return render_template("notrain.html", totalreg=totalreg(), datetoday2=datetoday2, mess=f"Model preparation error: {e}")
+        print("Model check:", e)
+    return render_template("detect.html")
 
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    # set moderate resolution for higher FPS
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)  # Ensure lower res for speed/accuracy balance
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    ret = True
-    stable_id = None
-    stable_count = 0
-    last_confirmed_person = None  # Track the last confirmed person
-    # Expression stability tracking
-    stable_expr = None
-    expr_count = 0
-    last_confirmed_expression = None
-    last_seen_expr = None
-    # Expression stability tracking (initialize to avoid NameError)
-    stable_expr = None
-    expr_count = 0
-    last_confirmed_expression = None
-    # Expression stability tracking
-    stable_expr = None
-    expr_count = 0
-    last_confirmed_expression = None
-    
-    try:
-        frame_idx = 0
-        while ret:
-            ret, frame = cap.read()
-            faces = extract_faces(frame)
-            if len(faces) > 0:
-                (x, y, w, h) = faces[0]
-                # Add slight padding to include more facial context
-                pad = int(0.08 * max(w, h))
-                x0 = max(0, x - pad)
-                y0 = max(0, y - pad)
-                x1 = min(frame.shape[1], x + w + pad)
-                y1 = min(frame.shape[0], y + h + pad)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                
-                # run recognition every third frame for speed
-                identified_person = stable_id if (frame_idx % 3 != 0 and stable_id is not None) else identify_face(frame[y0:y1, x0:x1])
 
-                # Emotion prediction (throttled)
-                current_expr = None
-                if frame_idx % 3 == 0:
-                    try:
-                        face_rgb = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2RGB)
-                        top = emotion_detector.top_emotion(face_rgb)
-                        if top and isinstance(top, tuple):
-                            current_expr = _map_emotion_to_basic(top[0])
-                            last_seen_expr = current_expr or last_seen_expr
-                    except Exception:
-                        current_expr = None
-                
-                # Multi-frame confirmation to reduce false positives
-                if identified_person:
-                    if identified_person == stable_id:
-                        stable_count += 1
-                    else:
-                        stable_id = identified_person
-                        stable_count = 1
-                    
-                    # Update last confirmed person when stable for 4+ frames
-                    if stable_count >= 4:
-                        last_confirmed_person = identified_person
-                        # If no confirmed expression yet, take the current one
-                        if last_confirmed_expression is None and current_expr:
-                            last_confirmed_expression = current_expr
-                        # Show confirmation indicator
-                        cv2.putText(frame, "CONFIRMED - Press ESC to mark attendance", 
-                                  (10, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 
-                                  0.6, (0, 255, 0), 2, cv2.LINE_AA)
-                else:
-                    stable_id = None
-                    stable_count = 0
-                
-                # Display current detection with expression label
-                display_expr = last_confirmed_expression or (current_expr if current_expr else "")
-                label_text = f"{identified_person}" if not display_expr else f"{identified_person} | {display_expr}"
-                cv2.putText(frame, label_text, (30, 30), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+## Route when public user clicks start attendance -> in-browser detection
+@app.route("/startuser", methods=["GET", "POST"])
+def startuser():
+    return redirect(url_for("detect"))
 
-                # Update expression stability
-                if current_expr:
-                    if current_expr == stable_expr:
-                        expr_count += 1
-                    else:
-                        stable_expr = current_expr
-                        expr_count = 1
-                    if expr_count >= 3:
-                        last_confirmed_expression = stable_expr
 
-                # Show expression overlay
-                if last_confirmed_expression:
-                    cv2.putText(frame, f"Expr: {last_confirmed_expression}", (30, 100),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
-
-                # Update expression stability
-                if current_expr:
-                    if current_expr == stable_expr:
-                        expr_count += 1
-                    else:
-                        stable_expr = current_expr
-                        expr_count = 1
-                    if expr_count >= 3:
-                        last_confirmed_expression = stable_expr
-
-                # Show expression overlay
-                if last_confirmed_expression:
-                    cv2.putText(frame, f"Expr: {last_confirmed_expression}", (30, 100),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
-
-                # Show stability indicator
-                if stable_count > 0:
-                    cv2.putText(frame, f"Stability: {stable_count}/4", (30, 70), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2, cv2.LINE_AA)
-            else:
-                # No face detected
-                cv2.putText(frame, "No face detected", (30, 30), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-            
-            # Show last confirmed person + expression
-            if last_confirmed_person:
-                ready_expr = last_confirmed_expression or "neutral"
-                cv2.putText(frame, f"Ready to mark: {last_confirmed_person} | {ready_expr}", 
-                          (10, frame.shape[0] - 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                          0.7, (255, 255, 255), 2, cv2.LINE_AA)
-            
-            frame_idx += 1
-            cv2.imshow("Attendance", frame)
-            if cv2.waitKey(1) == 27:  # ESC pressed
-                break
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
-
-    # Mark attendance for the last confirmed person when ESC is pressed
-    if last_confirmed_person and last_confirmed_person != "Unknown":
-        final_expr = last_confirmed_expression or last_seen_expr or "neutral"
-        add_attendance(last_confirmed_person, expression=final_expr)
-        flash(f"✅ Attendance marked for {last_confirmed_person}", "success")
-    elif last_confirmed_person == "Unknown":
-        flash("⚠️ Cannot mark attendance - person not recognized", "warning")
-    else:
-        flash("⚠️ No person confirmed - attendance not marked", "warning")
-
-    names, rolls, times, l = extract_attendance()
-    total_reg = totalreg()
-    date_today = datetoday2
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-    return render_template("attendancelist.html", names=names, rolls=rolls, times=times, l=l, totalreg=total_reg, datetoday2=date_today)
-
-### route function when admin take attendance
+## Route when admin clicks take attendance -> in-browser detection
 @app.route("/startadmin", methods=["GET", "POST"])
 @login_required
 def startadmin():
-    # Ensure LBP model is ready (will auto-train if missing)
+    return redirect(url_for("detect", ref="admin"))
+
+
+## API endpoint called by in-browser detect.html to recognize face and mark attendance
+@app.route("/recognize", methods=["POST"])
+def recognize():
     try:
-        ensure_expression_column()
-        ensure_lbp_model()
+        data = request.get_json()
+        if not data or "image" not in data:
+            return jsonify({"success": False, "is_known": False, "label": "Unknown", "message": "No image provided"}), 400
+
+        image_data = data["image"]
+        if "," in image_data:
+            image_data = image_data.split(",")[1]
+
+        image_bytes = base64.b64decode(image_data)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return jsonify({"success": False, "is_known": False, "label": "Unknown", "message": "Invalid image"}), 400
+
+        # Model recognition
+        model = ensure_lbp_model()
+        if model is None:
+            return jsonify({"success": False, "is_known": False, "label": "Unknown", "confidence": 0, "message": "Model not ready"})
+
+        person_name, confidence = model.predict(img)
+
+        # Emotion recognition
+        current_expr = "neutral"
+        if _FER_AVAILABLE and emotion_detector is not None:
+            try:
+                face_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                top = emotion_detector.top_emotion(face_rgb)
+                if top and isinstance(top, tuple):
+                    current_expr = _map_emotion_to_basic(top[0])
+            except Exception:
+                pass
+
+        if person_name and person_name != "Unknown":
+            try:
+                name, roll = person_name.split('_')
+                display_label = f"{name} (Roll: {roll})"
+                first_name = name
+                roll_no = roll
+            except Exception:
+                display_label = person_name
+                first_name = person_name
+                roll_no = ""
+
+            should_mark = data.get("mark_attendance", False)
+            if should_mark:
+                add_attendance(person_name, expression=current_expr)
+
+            return jsonify({
+                "success": True,
+                "is_known": True,
+                "label": display_label,
+                "name": first_name,
+                "roll": roll_no,
+                "confidence": round(float(confidence), 1) if confidence else 90.0,
+                "expression": current_expr,
+                "attendance_marked": should_mark,
+                "message": f"Recognized: {display_label}"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "is_known": False,
+                "label": "Unknown",
+                "name": "Unknown",
+                "confidence": round(float(confidence), 1) if confidence else 0,
+                "expression": current_expr,
+                "attendance_marked": False,
+                "message": "Face not recognized"
+            })
     except Exception as e:
-        return render_template("home.html", totalreg=totalreg(), datetoday2=datetoday2, 
-                            mess=f"Model preparation error: {e}")
-
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    ret = True
-    stable_id = None
-    stable_count = 0
-    last_confirmed_person = None  # Track the last confirmed person
-    # Expression stability tracking (admin)
-    stable_expr = None
-    expr_count = 0
-    last_confirmed_expression = None
-    last_seen_expr = None
-
-    try:
-        frame_idx = 0
-        while ret:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            faces = extract_faces(frame)
-            if len(faces) > 0:
-                (x, y, w, h) = faces[0]
-                # Add slight padding to include more facial context
-                pad = int(0.08 * max(w, h))
-                x0 = max(0, x - pad)
-                y0 = max(0, y - pad)
-                x1 = min(frame.shape[1], x + w + pad)
-                y1 = min(frame.shape[0], y + h + pad)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                
-                # Run recognition every third frame for speed
-                identified_person = stable_id if (frame_idx % 3 != 0 and stable_id is not None) else identify_face(frame[y0:y1, x0:x1])
-
-                # Emotion prediction (throttled)
-                current_expr = None
-                if frame_idx % 3 == 0:
-                    try:
-                        face_rgb = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2RGB)
-                        top = emotion_detector.top_emotion(face_rgb)
-                        if top and isinstance(top, tuple):
-                            current_expr = _map_emotion_to_basic(top[0])
-                    except Exception:
-                        current_expr = None
-                
-                # Multi-frame confirmation to reduce false positives
-                if identified_person:
-                    if identified_person == stable_id:
-                        stable_count += 1
-                    else:
-                        stable_id = identified_person
-                        stable_count = 1
-                    
-                    # Update last confirmed person when stable for 4+ frames
-                    if stable_count >= 4:
-                        last_confirmed_person = identified_person
-                        # Show confirmation indicator
-                        cv2.putText(frame, "CONFIRMED - Press ESC to mark attendance", 
-                                  (10, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 
-                                  0.6, (0, 255, 0), 2, cv2.LINE_AA)
-                else:
-                    stable_id = None
-                    stable_count = 0
-                
-                # Display current detection with expression label
-                display_expr = last_confirmed_expression or (current_expr if current_expr else "")
-                label_text = f"{identified_person}" if not display_expr else f"{identified_person} | {display_expr}"
-                cv2.putText(frame, label_text, (30, 30), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
-                # Update expression stability (admin)
-                if current_expr:
-                    if current_expr == stable_expr:
-                        expr_count += 1
-                    else:
-                        stable_expr = current_expr
-                        expr_count = 1
-                    if expr_count >= 3:
-                        last_confirmed_expression = stable_expr
-
-                # Show expression overlay (admin)
-                if last_confirmed_expression:
-                    cv2.putText(frame, f"Expr: {last_confirmed_expression}", (30, 100),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
-
-                # Show stability indicator
-                if stable_count > 0:
-                  cv2.putText(frame, f"Stability: {stable_count}/4", (30, 70), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2, cv2.LINE_AA)
-            else:
-                # No face detected
-                cv2.putText(frame, "No face detected", (30, 30), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-            
-            # Show last confirmed person + expression
-            if last_confirmed_person:
-                ready_expr = last_confirmed_expression or "neutral"
-                cv2.putText(frame, f"Ready to mark: {last_confirmed_person} | {ready_expr}", 
-                          (10, frame.shape[0] - 50), cv2.FONT_HERSHEY_SIMPLEX, 
-                          0.7, (255, 255, 255), 2, cv2.LINE_AA)
-            
-            frame_idx += 1
-            cv2.imshow("Attendance", frame)
-            if cv2.waitKey(1) == 27:  # ESC pressed
-                break
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
-
-    # Mark attendance for the last confirmed person when ESC is pressed
-    if last_confirmed_person and last_confirmed_person != "Unknown":
-        add_attendance(last_confirmed_person)
-        flash(f"✅ Attendance marked for {last_confirmed_person}", "success")
-    elif last_confirmed_person == "Unknown":
-        flash("⚠️ Cannot mark attendance - person not recognized", "warning")
-    else:
-        flash("⚠️ No person confirmed - attendance not marked", "warning")
-
-    names, rolls, times, l = extract_attendance()
-    total_reg = totalreg()
-    date_today = datetoday2
-
-    return render_template("home.html", names=names, rolls=rolls, times=times, l=l, totalreg=total_reg, datetoday2=date_today)
+        return jsonify({"success": False, "is_known": False, "label": "Unknown", "message": str(e)}), 500
 # Diagnostics: evaluate recognition on stored images (LBP only)
 @app.route("/diagnostics")
 @login_required
@@ -1380,8 +1208,71 @@ def diagnostics():
         return f"Diagnostics error: {str(e)}"
 
 
-### route function to add new user
+## In-browser Face Capture View
+@app.route("/face_capture")
+@login_required
+def face_capture_view():
+    username = request.args.get("username")
+    rollno = request.args.get("rollno")
+    if not username or not rollno:
+        flash("Missing username or roll number.", "danger")
+        return redirect(url_for("home"))
+    return render_template("face_capture.html", username=username, rollno=rollno)
 
+
+## API endpoint to receive captured face images from browser
+@app.route("/capture_face", methods=["POST"])
+def capture_face():
+    try:
+        data = request.get_json()
+        if not data or "image" not in data or "username" not in data or "rollno" not in data:
+            return jsonify({"success": False, "message": "Missing required data"}), 400
+
+        username = data["username"]
+        rollno = data["rollno"]
+        image_data = data["image"]
+
+        if "," in image_data:
+            image_data = image_data.split(",")[1]
+
+        image_bytes = base64.b64decode(image_data)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return jsonify({"success": False, "message": "Invalid image"}), 400
+
+        userimagefolder = os.path.join("static", "faces", f"{username}_{rollno}")
+        if not os.path.exists(userimagefolder):
+            os.makedirs(userimagefolder)
+
+        existing = [f for f in os.listdir(userimagefolder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        count = len(existing)
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
+        resized = cv2.resize(gray, (200, 200))
+        filename = f"{username}_{count}.jpg"
+        cv2.imwrite(os.path.join(userimagefolder, filename), resized)
+
+        new_count = count + 1
+
+        if new_count >= 20:
+            try:
+                model = LBPModel()
+                model.train_from_directory(os.path.join("static", "faces"))
+                model.save(os.path.join("static", "lbph_model"))
+                global lbp_model
+                lbp_model = model
+                print(f"✅ Model retrained with {new_count} images for {username}")
+            except Exception as e:
+                print("Retrain error:", e)
+
+        return jsonify({"success": True, "count": new_count})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+### route function to add new user
 @app.route("/add", methods=["GET", "POST"])
 @login_required
 def add():
@@ -1394,68 +1285,24 @@ def add():
             # Validate email format
             if not validate_email(useremail):
                 flash("❌ Invalid email address. Please enter a valid email (e.g., student@example.com)", "danger")
-                return render_template("add.html")
+                return redirect(url_for("home"))
             
             # Insert user details into the database
             if insert_user_details(newusername, newuserrollno, useremail):
-                render_template("use.html")
-                # If insertion successful, proceed with capturing user images
-                userimagefolder = "static/faces/" + newusername + "_" + str(newuserrollno)
+                userimagefolder = os.path.join("static", "faces", f"{newusername}_{newuserrollno}")
                 if not os.path.isdir(userimagefolder):
                     os.makedirs(userimagefolder)
 
-                cap = cv2.VideoCapture(0)
-                i, j = 0, 0
-                while 1:
-                    _, frame = cap.read()
-                    faces = extract_faces(frame)
-                    for x, y, w, h in faces:
-                        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 20), 2)
-                        cv2.putText(frame, f"Images Captured: {i}/40", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 20), 2, cv2.LINE_AA)
-                        # Save only sharp frames and at spaced intervals (every 15th frame = ~0.5 sec per image at 30 FPS)
-                        if i < 40 and j % 15 == 0:
-                            roi = frame[y:y+h, x:x+w]
-                            # Convert to grayscale
-                            gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                            # Check sharpness
-                            lap_var = cv2.Laplacian(gray_roi, cv2.CV_64F).var()
-                            if lap_var >= BLUR_THRESHOLD:
-                                # Resize to 200x200 (as per user's original code)
-                                resized_face = cv2.resize(gray_roi, (200, 200))
-                                # Save RAW grayscale (no preprocessing - that's done during training)
-                                name = newusername + "_" + str(i) + ".jpg"
-                                cv2.imwrite(userimagefolder + "/" + name, resized_face)
-                                i += 1
-                        j += 1
-                    if i >= 40:
-                        break
-                    cv2.imshow("Adding new User", frame)
-                    if cv2.waitKey(1) == 27:
-                        break
-
-                cap.release()
-                cv2.destroyAllWindows()
-
-                # Retrain Basic LBPH model for immediate use
-                try:
-                    model = LBPModel()
-                    model.train_from_directory(os.path.join("static", "faces"))
-                    model.save(os.path.join("static", "lbph_model"))
-                    
-                    # Refresh global model
-                    global lbp_model
-                    lbp_model = model
-                    print(f"✅ Model retrained successfully with new user")
-                except Exception as e:
-                    print(f"❌ LBP retrain error: {e}")
-
-                flash("New user added successfully", "success")
+                # Open browser face capture
+                return redirect(url_for("face_capture_view", username=newusername, rollno=newuserrollno))
+            else:
+                flash("❌ User details already exist or database insertion failed.", "danger")
                 return redirect(url_for("home"))
-
         else:
-            flash("Please fill in all the fields", "danger")
+            flash("❌ Please fill in all fields.", "danger")
+            return redirect(url_for("home"))
+    return redirect(url_for("home"))
 
-    return render_template("add.html")  # Render the add user form
 
 
 
@@ -1502,8 +1349,7 @@ def add_more_images(id):
 @app.route("/capture_more_images/<int:id>/<int:count>")
 @login_required
 def capture_more_images(id, count):
-    """Capture additional training images for an existing user"""
-    # Get user details
+    """Capture additional training images for an existing user using in-browser webcam"""
     user = get_user_details(id=id)
     if not user:
         flash("User not found", "danger")
@@ -1511,84 +1357,7 @@ def capture_more_images(id, count):
     
     username = user[0][1]
     rollno = user[0][2]
-    
-    # Get the user's image folder
-    userimagefolder = "static/faces/" + username + "_" + str(rollno)
-    
-    if not os.path.isdir(userimagefolder):
-        flash("User image folder not found. Please contact administrator.", "danger")
-        return redirect(url_for("userdetails"))
-    
-    # Count existing images to continue numbering
-    existing_images = [f for f in os.listdir(userimagefolder) 
-                      if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-    start_index = len(existing_images)
-    
-    # Capture new images
-    cap = cv2.VideoCapture(0)
-    i, j = 0, 0
-    images_captured = 0
-    
-    try:
-        while images_captured < count:
-            ret, frame = cap.read()
-            if not ret:
-                break
-                
-            faces = extract_faces(frame)
-            for x, y, w, h in faces:
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 20), 2)
-                cv2.putText(frame, f"Images Captured: {images_captured}/{count}", 
-                          (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 20), 2, cv2.LINE_AA)
-                cv2.putText(frame, f"User: {username}", 
-                          (30, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-                
-                # Save only sharp frames and at spaced intervals (every 15th frame = ~0.5 sec per image at 30 FPS)
-                if images_captured < count and j % 15 == 0:
-                    roi = frame[y:y+h, x:x+w]
-                    # Convert to grayscale
-                    gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                    # Check sharpness
-                    lap_var = cv2.Laplacian(gray_roi, cv2.CV_64F).var()
-                    if lap_var >= BLUR_THRESHOLD:
-                        # Resize to 200x200 (same as training)
-                        resized_face = cv2.resize(gray_roi, (200, 200))
-                        # Save RAW grayscale (preprocessing done during training)
-                        name = username + "_" + str(start_index + images_captured) + ".jpg"
-                        cv2.imwrite(userimagefolder + "/" + name, resized_face)
-                        images_captured += 1
-                j += 1
-            
-            if images_captured >= count:
-                break
-            
-            cv2.imshow(f"Adding More Images for {username}", frame)
-            if cv2.waitKey(1) == 27:  # ESC to cancel
-                break
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
-    
-    if images_captured > 0:
-        # Retrain Basic LBPH model with new images
-        try:
-            model = LBPModel()
-            model.train_from_directory(os.path.join("static", "faces"))
-            model.save(os.path.join("static", "lbph_model"))
-            
-            # Refresh global model
-            global lbp_model
-            lbp_model = model
-            print(f"✅ Model retrained successfully with {images_captured} new images for {username}")
-            
-            flash(f"✅ Successfully captured {images_captured} additional images for {username}. Model retrained!", "success")
-        except Exception as e:
-            print(f"❌ LBP retrain error: {e}")
-            flash(f"⚠️ Images captured but model retrain failed: {e}", "warning")
-    else:
-        flash("⚠️ No images were captured", "warning")
-    
-    return redirect(url_for("userdetails"))
+    return redirect(url_for("face_capture_view", username=username, rollno=rollno))
 
 
 ## a route to edit users
@@ -2072,4 +1841,4 @@ def retrain_model():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)

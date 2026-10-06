@@ -402,14 +402,14 @@
                 return;
             }
 
-            // Create a temporary canvas for the face
+            // Create a temporary canvas for the face (200x200 for LBPH training)
             var tempCanvas = document.createElement('canvas');
-            tempCanvas.width = 50;
-            tempCanvas.height = 50;
+            tempCanvas.width = 200;
+            tempCanvas.height = 200;
             var tempCtx = tempCanvas.getContext('2d');
             
-            // Draw the detected face region into our temporary canvas, resizing it to 50x50
-            tempCtx.drawImage(ctx.canvas, x, y, s, s, 0, 0, 50, 50);
+            // Draw the detected face region into our temporary canvas at 200x200
+            tempCtx.drawImage(ctx.canvas, x, y, s, s, 0, 0, 200, 200);
             
             // Convert to base64
             var imageData = tempCanvas.toDataURL('image/jpeg');
@@ -468,6 +468,11 @@
             const statusText = document.getElementById("status-text");
             statusText.textContent = `All ${REQUIRED_CAPTURES} images captured successfully!`;
         }
+
+        // Automatically start webcam when page loads
+        window.addEventListener('DOMContentLoaded', function() {
+            button_callback();
+        });
     </script>
 </body>
 </html>
