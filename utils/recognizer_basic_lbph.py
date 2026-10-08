@@ -132,9 +132,9 @@ class BasicLBPHRecognizer:
         # Predict
         label_id, distance = self.model.predict(face_image)
         
-        # In LBPH: distance <= 110.0 is a strong match for the person
-        if distance <= 110.0:
-            confidence = int(max(45, min(99, 100 - (distance * 0.55))))
+        # In LBPH: distance <= 135.0 is a match for the person in webcam conditions
+        if distance <= 135.0:
+            confidence = int(max(50, min(99, 100 - (distance * 0.45))))
             person_name = self.labels_to_name.get(label_id, "Unknown")
             return person_name, confidence
         
@@ -167,7 +167,7 @@ class BasicLBPHRecognizer:
         label_id, distance = self.model.predict(face_image)
         
         # Check threshold
-        if distance <= 110.0:
+        if distance <= 135.0:
             person_name = self.labels_to_name.get(label_id, "Unknown")
             return person_name, float(distance)
         

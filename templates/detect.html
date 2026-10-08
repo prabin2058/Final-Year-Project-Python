@@ -383,12 +383,11 @@
       isSendingRecognition = true;
 
       try {
-        // Crop face with 20% margin for better accuracy
-        const pad = Math.round(size * 0.15);
-        const cropX = Math.max(0, x - pad);
-        const cropY = Math.max(0, y - pad);
-        const cropW = Math.min(canvasElement.width - cropX, size + pad * 2);
-        const cropH = Math.min(canvasElement.height - cropY, size + pad * 2);
+        // Align crop exactly with training capture (clamp bounds cleanly)
+        const cropX = Math.max(0, Math.min(canvasElement.width - 10, x));
+        const cropY = Math.max(0, Math.min(canvasElement.height - 10, y));
+        const cropW = Math.min(size, canvasElement.width - cropX);
+        const cropH = Math.min(size, canvasElement.height - cropY);
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 200;
@@ -396,7 +395,7 @@
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(canvasElement, cropX, cropY, cropW, cropH, 0, 0, 200, 200);
 
-        const imageData = tempCanvas.toDataURL('image/jpeg', 0.9);
+        const imageData = tempCanvas.toDataURL('image/jpeg', 0.95);
 
         const response = await fetch('/recognize', {
           method: 'POST',

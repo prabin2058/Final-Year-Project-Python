@@ -19,9 +19,15 @@ except Exception:
     _FER_AVAILABLE = False
     print("⚠️ FER (emotion recognition) not available - emotion detection disabled.")
 
-# Import Basic LBPH model (Simple and Working)
+# Import Recognition Engines: Deep SFace (99.4% Deep Learning) with Basic LBPH fallback
 from utils.recognizer_basic_lbph import BasicLBPHRecognizer as LBPModel
-print("✅ Using Basic LBPH model (OpenCV built-in - Simple and Reliable)")
+try:
+    from utils.recognizer_deep_sface import DeepSFaceRecognizer
+    _DEEP_SFACE_AVAILABLE = True
+    print("🚀 Deep Learning SFace Engine available (99.4% ArcFace Accuracy)")
+except Exception as e:
+    _DEEP_SFACE_AVAILABLE = False
+    print("⚠️ Deep SFace Engine not available, using LBPH fallback:", e)
 
 import time
 
@@ -298,16 +304,31 @@ def validate_email(email):
     return True
 
 
-# Recognition backend (LBP only)
+# Recognition backend (Deep SFace with LBPH fallback)
 lbp_model = None
 
 def ensure_lbp_model():
-    """Load or train the Basic LBPH model."""
+    """Load or train the face recognition model (Deep SFace if available, else LBPH)."""
     global lbp_model
     if lbp_model is not None:
         return lbp_model
-    
-    model_path = os.path.join("static", "lbph_model")  # Will create .xml and _labels.pkl
+
+    # Check if Deep SFace models exist
+    if _DEEP_SFACE_AVAILABLE and os.path.exists("models/face_recognition_sface_2021dec.onnx"):
+        try:
+            print("🚀 Initializing Deep Learning SFace Recognizer...")
+            sface = DeepSFaceRecognizer()
+            if os.path.exists("static/sface_embeddings.pkl"):
+                sface.load("static/sface_embeddings")
+            elif os.path.exists("static/faces") and len(os.listdir("static/faces")) > 0:
+                sface.train_from_directory("static/faces")
+                sface.save("static/sface_embeddings")
+            lbp_model = sface
+            return lbp_model
+        except Exception as e:
+            print(f"⚠️ SFace initialization error: {e}, falling back to LBPH")
+
+    model_path = os.path.join("static", "lbph_model")
     
     # Try to load existing model
     if os.path.exists(model_path + ".xml"):
@@ -318,30 +339,19 @@ def ensure_lbp_model():
             lbp_model = model
             return lbp_model
         except Exception as e:
-            print(f"⚠️ Error loading model: {e}")
+            print(f"⚠️ Error loading LBPH model: {e}")
             print("🔄 Will retrain...")
     
     # Train new model
     faces_root = os.path.join("static", "faces")
-    
     if not os.path.exists(faces_root) or len(os.listdir(faces_root)) == 0:
         print(f"⚠️ No training data found in {faces_root}")
         return None
     
     print(f"🎓 Training new Basic LBPH model...")
-    
     model = LBPModel()
-    
-    # Train model
-    start_time = time.time()
     model.train_from_directory(faces_root)
-    
-    training_time = time.time() - start_time
-    print(f"✅ Training completed in {training_time:.2f} seconds")
-    
-    # Save model
     model.save(model_path)
-    
     lbp_model = model
     return lbp_model
 
@@ -1258,12 +1268,19 @@ def capture_face():
 
         if new_count >= 20:
             try:
-                model = LBPModel()
-                model.train_from_directory(os.path.join("static", "faces"))
-                model.save(os.path.join("static", "lbph_model"))
                 global lbp_model
-                lbp_model = model
-                print(f"✅ Model retrained with {new_count} images for {username}")
+                if _DEEP_SFACE_AVAILABLE and os.path.exists("models/face_recognition_sface_2021dec.onnx"):
+                    sface = DeepSFaceRecognizer()
+                    sface.train_from_directory("static/faces")
+                    sface.save("static/sface_embeddings")
+                    lbp_model = sface
+                    print(f"🚀 Deep SFace retrained with {new_count} images for {username}")
+                else:
+                    model = LBPModel()
+                    model.train_from_directory(os.path.join("static", "faces"))
+                    model.save(os.path.join("static", "lbph_model"))
+                    lbp_model = model
+                    print(f"✅ LBPH model retrained with {new_count} images for {username}")
             except Exception as e:
                 print("Retrain error:", e)
 
